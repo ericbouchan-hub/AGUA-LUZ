@@ -1,4 +1,4 @@
-const CACHE = "consumos-v2"; // ⬅️ CAMBIAR versión
+const CACHE = "consumos-v3"; // ⬅️ CAMBIAR versión
 const files = [
   "./",
   "index.html",
