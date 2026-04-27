@@ -1,10 +1,22 @@
-
-const CACHE = "consumos-v1";
-const files = ["index.html", "manifest.json"]; 
+const CACHE = "consumos-v2"; // ⬅️ CAMBIAR versión
+const files = [
+  "./",
+  "index.html",
+  "manifest.json"
+];
 
 self.addEventListener("install", e => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE).then(cache => cache.addAll(files))
+  );
+});
+
+self.addEventListener("activate", e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
   );
 });
 
