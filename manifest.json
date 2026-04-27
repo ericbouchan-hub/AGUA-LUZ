@@ -1,7 +1,7 @@
 {
   "name": "Resumen de Consumos",
   "short_name": "Consumos",
-  "start_url": "./index.html",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#1c2331",
   "theme_color": "#1c2331",
