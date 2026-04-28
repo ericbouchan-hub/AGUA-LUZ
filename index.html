@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+
+  <!-- ✅ CLAVE PARA ANDROID -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1c2331">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <title>Mantenimiento - Resumen de Consumos</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Librerías -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #1c2331;
+      color: #fff;
+      padding: 15px;
+    }
+    h1 { text-align: center; }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 15px;
+    }
+    .card {
+      background: #2c3446;
+      border-radius: 10px;
+      padding: 15px;
+    }
+    .card h2 {
+      text-align: center;
+      border-bottom: 2px solid #4caf50;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+    }
+    label { font-size: 13px; display: block; margin-bottom: 5px; }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 16px;
+    }
+    button { background: #4caf50; color: #fff; }
+    button.danger { background: #e53935; }
+    canvas { max-height: 220px; }
+
+    #hamburguesa {
+      position: fixed;
+      top: 15px;
+      right: 20px;
+      font-size: 26px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+    #menu {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 240px;
+      height: 100%;
+      background: #2c3446;
+      padding: 20px;
+      transform: translateX(100%);
+      transition: .3s;
+      z-index: 1000;
+    }
+    #menu.open { transform: translateX(0); }
+  </style>
+</head>
+
+<body>
+
+<div id="hamburguesa" onclick="toggleMenu()">☰</div>
+
+<div id="menu">
+  <h3>Menú</h3>
+  <button onclick="exportarExcel()">📊 Exportar Excel</button>
+  <button onclick="document.getElementById('importExcel').click()">📥 Importar Excel</button>
+  <input type="file" id="importExcel" accept=".xlsx,.xls" style="display:none"
+         onchange="importarExcel(this.files[0])">
+  <button class="danger" onclick="borrarTodo()">🗑️ Borrar datos</button>
+</div>
+
+<h1>Resumen de Consumos</h1>
+<div class="dashboard" id="dashboard"></div>
+
+<script>
+const servicios = [
+  { id: "agua", nombre: "Agua", unidad: "m³" },
+  { id: "luz", nombre: "Luz", unidad: "kWh" },
+  { id: "diesel", nombre: "Diésel", unidad: "Lts" },
+  { id: "gas", nombre: "Gas", unidad: "m³" }
+];
+
+const charts = {};
+
+const hoyISO = () => new Date().toISOString().split("T")[0];
+const mesActual = () => hoyISO().slice(0,7);
+
+const historial = id =>
+  JSON.parse(localStorage.getItem(id + "_historial")) || {};
+
+function toggleMenu() {
+  document.getElementById("menu").classList.toggle("open");
+}
+
+function guardarHistorial(id, fecha, valor) {
+  if (!fecha || valor === "") {
+    alert("Completa los campos");
+    return;
+  }
+  const h = historial(id);
+  h[fecha] = Number(valor);
+  localStorage.setItem(id + "_historial", JSON.stringify(h));
+  renderMes(id);
+}
+
+function renderMes(id) {
+  const ym = document.getElementById(id + "_mes").value || mesActual();
+  const h = historial(id);
+
+  const labels = [];
+  const data = [];
+  let total = 0;
+  const fechas = Object.keys(h).filter(f => f.startsWith(ym)).sort();
+
+  fechas.forEach((f,i) => {
+    const consumo = i === 0 ? 0 : h[f] - h[fechas[i-1]];
+    labels.push(f);
+    data.push(consumo);
+    total += consumo;
+  });
+
+  document.getElementById("total_" + id).textContent =
+    `Total: ${total} ${servicios.find(s => s.id === id).unidad}`;
+
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById("graf_" + id), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{ data, borderColor: "#4caf50", pointRadius: 5 }]
+    }
+  });
+}
+
+function crearTarjeta(s) {
+  return `
+  <div class="card">
+    <h2>${s.nombre}</h2>
+    <input type="month" id="${s.id}_mes" value="${mesActual()}"
+           onchange="renderMes('${s.id}')">
+    <input type="date" id="f_${s.id}" value="${hoyISO()}">
+    <input type="number" id="v_${s.id}" placeholder="Consumo ${s.unidad}">
+    <button onclick="guardarHistorial('${s.id}', f_${s.id}.value, v_${s.id}.value)">Guardar</button>
+    <div id="total_${s.id}">Total: 0 ${s.unidad}</div>
+    <canvas id="graf_${s.id}"></canvas>
+  </div>`;
+}
+
+const dash = document.getElementById("dashboard");
+servicios.forEach(s => {
+  dash.insertAdjacentHTML("beforeend", crearTarjeta(s));
+  renderMes(s.id);
+});
+
+function exportarExcel() {
+  const wb = XLSX.utils.book_new();
+  servicios.forEach(s => {
+    const h = historial(s.id);
+    const rows = [["Fecha", s.unidad]];
+    Object.keys(h).sort().forEach(f => rows.push([f, h[f]]));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), s.nombre);
+  });
+  XLSX.writeFile(wb, "Consumos.xlsx");
+  toggleMenu();
+}
+
+function importarExcel(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+    servicios.forEach(s => {
+      const sheet = wb.Sheets[s.nombre];
+      if (!sheet) return;
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const h = historial(s.id);
+      rows.slice(1).forEach(r => {
+        if (r[0] && r[1] !== "") h[r[0]] = Number(r[1]);
+      });
+      localStorage.setItem(s.id + "_historial", JSON.stringify(h));
+      renderMes(s.id);
+    });
+    alert("✅ Excel importado");
+    toggleMenu();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function borrarTodo() {
+  if (!confirm("¿Borrar todos los datos?")) return;
+  servicios.forEach(s => {
+    localStorage.removeItem(s.id + "_historial");
+    renderMes(s.id);
+  });
+  toggleMenu();
+}
+</script>
+
+</body>
+</html>
+``
